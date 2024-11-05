@@ -1,0 +1,6 @@
+[theme]
+primaryColor="#ffffff"  # A bright green
+backgroundColor="#002a17"  # Dark green background
+secondaryBackgroundColor="#004a2b"  # Light green background
+textColor="#b8ae9f"  # Softer muted beige text
+font="sans serif"

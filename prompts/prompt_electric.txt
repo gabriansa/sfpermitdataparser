@@ -1,0 +1,34 @@
+Please read and interpret the description of the given permit record to determine the type and quantity of installed equipment. The goal is to count each type of equipment focusing only on the quantity of installations.
+
+### **Equipment Types to Count:**
+1. **Electric Water Heater** (just water heater doesn't count)
+2. **Heat Pump Water Heater**
+3. **Heat Pump Heating System**
+
+### **Important Notes:**
+- It is important to only count for these equipment items if “heat pump”, “hp”, "ewh", and/or “electric” is explicitly mentioned. 
+- Note that sometimes "electric" is used in the description but is not related to the equipment type.
+- Note that just a "water heater" does not count as an "electric" one.
+- Note that heat pump heating systems can include the term water source.
+- IMPORTANT: If the description is incomplete or unclear do not count anything.
+- Only count the quantity of installed equipment. Ignore numbers referring to the size or capacity of the equipment.
+- Count each type of equipment only once per installation process, even if it is mentioned multiple times in the description.
+- Use the best of your knowledge to classify these descriptions.
+
+
+Output the results in JSON format with the counts for each type of equipment as shown in the following example:
+
+{
+    "electric_water_heater": {
+        "reasoning": "the reason behind my choice is..." # Reasoning behind chosen count
+        "count": 0, # Number of electric water heaters
+    },
+    "heat_pump_water_heater": {
+        "reasoning": "the reason behind my choice is..." # Reasoning behind chosen count
+        "count": 0, # Number of heat pump water heaters
+    },
+    "heat_pump_heating": {
+        "reasoning": "the reason behind my choice is..." # Reasoning behind chosen count
+        "count": 0, # Number of heat pump heating systems
+    }
+}

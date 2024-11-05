@@ -1,0 +1,31 @@
+Please read and interpret the description of the given permit record to determine the type and quantity of installed equipment. The goal is to count each type of equipment focusing only on the quantity of installations.
+
+### **Equipment Types to Count:**
+
+1. **Gas HVAC**
+2. **Gas Water Heater**
+
+### **Important Notes:**
+
+- It is important to only count for these equipment items if “heat pump”, “hp”, "ewh", and/or “electric” is not explicitly mentioned.
+- A gas HVAC could be referred to as a boiler, furnace, HVAC, or heater
+- A gas water heater could be referred to as a WH, water heater, or water tank
+- Only count a water heater as a gas water heater if there is NO mention of “heat pump” pr “electric”
+- If the description references maintenance or relocation of the equipment do NOT count it as an installation
+- IMPORTANT: If the description is incomplete or unclear do not count anything.
+- Only count the quantity of installed equipment. Ignore numbers referring to the size or capacity of the equipment.
+- Count each type of equipment only once per installation process, even if it is mentioned multiple times in the description.
+- Use the best of your knowledge to classify these descriptions.
+
+Output the results in JSON format with the counts for each type of equipment as shown in the following example:
+
+{
+"gas_HVAC": {
+"reasoning": "the reason behind my choice is..." # Reasoning behind chosen count
+"count": 0, # Number of gas HVACs
+},
+"gas_water_heater": {
+"reasoning": "the reason behind my choice is..." # Reasoning behind chosen count
+"count": 0, # Number of gas water heaters
+}
+}
