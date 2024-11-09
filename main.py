@@ -285,11 +285,18 @@ def main():
     # API key input in right column
     with col2:
         api_key = st.text_input(
-            f"Enter your {st.session_state.selected_provider} API Key",
+            f"Enter your {st.session_state.selected_provider} API Key " +
+            f"([Get API Key]({'https://platform.openai.com/api-keys' if st.session_state.selected_provider == 'OpenAI' else 'https://console.anthropic.com/account/keys' if st.session_state.selected_provider == 'Anthropic' else 'https://console.groq.com/keys'}))",
             type="password",
             help=f"💡 To get your API key: Visit the {st.session_state.selected_provider} website and generate a new API key"
         )
         if api_key:
+            # Display cost warning based on provider
+            if st.session_state.selected_provider in ["OpenAI", "Anthropic"]:
+                st.warning(f"⚠️ {st.session_state.selected_provider} API usage will incur charges based on your usage. Make sure you understand their pricing model.")
+            elif st.session_state.selected_provider == "Groq":
+                st.success("ℹ️ Groq API is currently free to use!")
+                
             st.session_state.api_key = api_key
             # Set the appropriate environment variable based on provider
             if st.session_state.selected_provider == "OpenAI":
