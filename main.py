@@ -1,5 +1,4 @@
 import streamlit as st
-from groq import Groq
 import json
 import pandas as pd
 from time import sleep
@@ -8,6 +7,16 @@ from pathlib import Path
 import glob
 from dataclasses import dataclass
 from typing import List
+from litellm import (
+    completion,
+    RateLimitError,
+    ContextWindowExceededError,
+    BadRequestError,
+    AuthenticationError,
+    APIConnectionError,
+    APIError
+)
+import os
 
 @dataclass
 class Template:
@@ -16,76 +25,77 @@ class Template:
     columns: List[str]
 
 def description_to_json(description, system_prompt, columns):
-    client = Groq(api_key=st.session_state.api_key)
-    user_prompt = f"Description: {description}"
     temperature = 0
-    max_retries = 3
+    max_retries = 5
     retry_count = 0
+    base_delay = 1  # Base delay in seconds
 
     while retry_count < max_retries:
         try:
-            completion = client.chat.completions.create(
+            response = completion(
                 model=st.session_state.selected_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": f"Description: {description}"}
                 ],
                 temperature=temperature,
                 max_tokens=1024,
-                top_p=1,
-                stream=False,
-                response_format={"type": "json_object"},
-                stop=None,
+                drop_params=True,
             )
 
-            output_ = completion.choices[0].message
-            output = json.loads(output_.content)
+            output = json.loads(response.choices[0].message.content)
             # Validate output structure
             for col_name in columns:
                 output[col_name]['count']
             return output
 
-        except Exception as e:
-            error_msg = str(e)
-            
-            # Handle rate limiting (429)
-            if "429" in error_msg and "Please try again in" in error_msg:
-                wait_time_match = re.search(r'try again in ([\d\w.]+)\.', error_msg)
-                if wait_time_match:
-                    wait_time_str = wait_time_match.group(1)
-                    total_seconds = 0
-                    if 'm' in wait_time_str:
-                        minutes, seconds = wait_time_str.split('m')
-                        total_seconds = float(minutes) * 60 + float(seconds.replace('s', ''))
-                    else:
-                        total_seconds = float(wait_time_str.replace('s', ''))
-                    sleep(total_seconds + 1)
-                    continue
+        except RateLimitError as e:
+            # Exponential backoff for rate limits
+            delay = base_delay * (2 ** retry_count)
+            sleep(delay)
+            retry_count += 1
+            continue
 
-            # Handle authentication errors (401)
-            if "401" in error_msg:
-                raise Exception("Invalid API key. Please check your credentials.") from e
+        except ContextWindowExceededError as e:
+            # This is a permanent error - the input is too long
+            raise Exception("Input text is too long for the model's context window") from e
 
-            # Handle bad requests (400)
-            if "400" in error_msg:
-                raise Exception("Invalid request format. Please check your prompt structure.") from e
+        except BadRequestError as e:
+            # Try increasing temperature for malformed responses
+            if temperature < 0.9:
+                temperature += 0.1
+                continue
+            raise Exception(f"Invalid request: {str(e)}") from e
 
-            # Handle server errors (500, 502, 503)
-            if any(code in error_msg for code in ["500", "502", "503"]):
-                if retry_count < max_retries - 1:
-                    retry_count += 1
-                    sleep(2 ** retry_count)  # Exponential backoff
-                    continue
-                else:
-                    raise Exception("Server error after multiple retries. Please try again later.") from e
+        except AuthenticationError as e:
+            # Authentication errors should fail immediately
+            raise Exception("Invalid API key or authentication error") from e
 
-            # Handle malformed responses by increasing temperature
+        except APIConnectionError as e:
+            # Network errors can be retried
+            sleep(base_delay)
+            retry_count += 1
+            continue
+
+        except APIError as e:
+            # Generic API errors - retry with backoff
+            delay = base_delay * (2 ** retry_count)
+            sleep(delay)
+            retry_count += 1
+            continue
+
+        except json.JSONDecodeError as e:
+            # Try increasing temperature for malformed JSON
             if temperature < 1.0:
                 temperature += 0.1
                 continue
-            
-            # If we've exhausted all retry attempts and temperature adjustments
-            raise Exception(f"Failed to process description after multiple attempts: {error_msg}") from e
+            raise Exception("Failed to parse model response as JSON") from e
+
+        except Exception as e:
+            # Unexpected errors
+            retry_count += 1
+            if retry_count >= max_retries:
+                raise Exception(f"Max retries reached. Last error: {str(e)}") from e
 
     raise Exception("Maximum retry attempts exceeded")
 
@@ -183,7 +193,9 @@ def initialize_session_state():
     if "processed_df" not in st.session_state:
         st.session_state.processed_df = None
     if "selected_model" not in st.session_state:
-        st.session_state.selected_model = "llama-3.1-70b-versatile"
+        st.session_state.selected_model = "gpt-4"
+    if "selected_provider" not in st.session_state:
+        st.session_state.selected_provider = "OpenAI"
 
 def main():
     # Add custom CSS at the start of main()
@@ -220,7 +232,10 @@ def main():
     # How to use
     with st.expander("📖 How to Use", expanded=False):
         st.markdown("""
-            1. Enter your Groq API key
+            1. **API Key Setup:**
+               - For OpenAI: Visit [OpenAI API Keys](https://platform.openai.com/api-keys) to generate a key
+               - For Anthropic: Go to [Anthropic Console](https://console.anthropic.com/account/keys) to create a key
+               - For Groq: Access [Groq Console](https://console.groq.com/keys) to get your API key
             2. Upload a CSV file containing permit descriptions (must have a column named 'Description')
             3. Select a template for the type of equipment you want to analyze
             4. Download the parsed results and equipment counts when processing is complete
@@ -239,36 +254,50 @@ def main():
     
     # Model selection in left column
     with col1:
-        models = [
-            "llama-3.1-70b-versatile",
-            "distil-whisper-large-v3-en",
-            "gemma2-9b-it",
-            "gemma-7b-it",
-            "llama-3.1-8b-instant",
-            "llama-3.2-1b-preview",
-            "llama-3.2-3b-preview",
-            "llama-guard-3-8b",
-            "llama3-70b-8192",
-            "llama3-8b-8192",
-            "mixtral-8x7b-32768",
-        ]
+        providers = ["OpenAI", "Anthropic", "Groq"]
+        st.session_state.selected_provider = st.selectbox(
+            "Select Provider",
+            providers,
+            index=providers.index("OpenAI")
+        )
+
+        # Model options based on provider
+        if st.session_state.selected_provider == "OpenAI":
+            models = [
+                "gpt-4o-mini",
+            ]
+        elif st.session_state.selected_provider == "Anthropic":
+            models = [
+                "claude-3-5-sonnet-20240620",
+            ]
+        else:  # Groq
+            models = [
+                "groq/llama-3.1-70b-versatile",
+            ]
         
         st.session_state.selected_model = st.selectbox(
             "Select Model",
             models,
-            index=models.index("llama-3.1-70b-versatile"),
-            help="💡 Recommended: llama-3.1-70b-versatile"
+            index=0,
+            help="💡 Select your preferred model"
         )
     
     # API key input in right column
     with col2:
         api_key = st.text_input(
-            "Enter your Groq API Key",
+            f"Enter your {st.session_state.selected_provider} API Key",
             type="password",
-            help="💡 To get your API key: Visit console.groq.com, create an account, and generate a new API key"
+            help=f"💡 To get your API key: Visit the {st.session_state.selected_provider} website and generate a new API key"
         )
         if api_key:
             st.session_state.api_key = api_key
+            # Set the appropriate environment variable based on provider
+            if st.session_state.selected_provider == "OpenAI":
+                os.environ["OPENAI_API_KEY"] = api_key
+            elif st.session_state.selected_provider == "Anthropic":
+                os.environ["ANTHROPIC_API_KEY"] = api_key
+            else:  # Groq
+                os.environ["GROQ_API_KEY"] = api_key
     
     # File upload
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
