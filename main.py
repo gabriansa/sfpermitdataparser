@@ -264,7 +264,7 @@ def main():
         # Model options based on provider
         if st.session_state.selected_provider == "OpenAI":
             models = [
-                "gpt-4o-mini",
+                "gpt-3.5-turbo-1106",
             ]
         elif st.session_state.selected_provider == "Anthropic":
             models = [
